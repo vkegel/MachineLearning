@@ -1,0 +1,111 @@
+---
+title: "Practical Machine Learning"
+author: "VLKegel"
+date: "September 28, 2017"
+output: html_document
+---
+## Summary
+This project involves the use of excercise movement data to predict the type of excercise.   Six subjects were asked to perform barbell lifts correctly and incorrectly with data measurements taken each time. Training and test data were provided to allow us to build a predictive model to determine based on the movements which excercises were conducted. 
+
+The requisite libraries are loaded and the data is read in to an appropriate test or training data frame. 
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2, suppressPackageStartupMessages())
+library(lattice)
+library(caret)
+
+ptrain <- read.csv("pml-training.csv")
+ptest <- read.csv("pml-testing.csv")
+```
+Divide the Training data into two seperate dataframes for machine learning training. 
+
+```{r}
+
+set.seed(2)
+inTrain <- createDataPartition(y=ptrain$classe, p=0.7, list=F)
+ptrain1 <- ptrain[inTrain, ]
+ptrain2 <- ptrain[-inTrain, ]
+```
+To limit the amount of variables to analyze, the variables that are static (or nearly so) are removed as well as those that are missing a significant number of values. Since the values are nearly constant in all observations, the will not have an affect on the training. 
+
+```{r cleandata}
+# Delete columns that are fairly static
+nzv <- nearZeroVar(ptrain1)
+ptrain1 <- ptrain1[, -nzv]
+ptrain2 <- ptrain2[, -nzv]
+
+# delete columns if the contain more that 90% NA
+signNA <- sapply(ptrain1, function(x) mean(is.na(x))) > 0.90
+ptrain1 <- ptrain1[, signNA==F]
+ptrain2 <- ptrain2[, signNA==F]
+
+# remove label columns
+ptrain1 <- ptrain1[, -(1:5)]
+ptrain2 <- ptrain2[, -(1:5)]
+
+# remove columns with High Correlation
+
+cutoff<-.90
+cor.matrix<- cor(ptrain1[,-ncol(ptrain1)])
+cor.high<-findCorrelation(cor.matrix, cutoff)
+high.cor.remove<-row.names(cor.matrix)[cor.high]
+
+ptrain1<-ptrain1[,-cor.high]
+ptrain2<-ptrain2[,-cor.high]
+
+```
+
+Building the model using Random Forrests. 
+
+```{R  train}
+# setting parameters for training
+
+fitControl <- trainControl(method="cv", number=3, verboseIter=F)
+
+# fit model on ptrain1
+
+RFfit <- train(classe ~ ., data=ptrain1, method="rf", trControl=fitControl)
+```
+
+## Random Forest Results. 
+The random forest achieve very good results with accuracy of 99%. 
+
+```{r Model}
+RFfit$finalModel
+
+
+```
+
+Applying this model to the other dataset yields predicted accuracy of 99%. 
+
+```{r prediction, echo=FALSE}
+
+# Predict the outcome based on the prtrain data
+prediction <- predict(RFfit, newdata=ptrain2)
+
+# display results
+confusionMatrix(ptrain2$classe, prediction)
+```
+
+## Linear Discriminant Analysis 
+
+Another approach uses LDA to assign the data into classes. We will use the same data sets as before but using the LDA method instead of the Random Forest method. 
+
+```{r LDAtraining}
+
+PREPROCESS <-NULL
+PREPROCESS <-c("center", "scale")
+METHOD <- "lda"
+
+LDAfit<- train(classe~., data=ptrain1, preProcess=PREPROCESS, method=METHOD)
+
+OutOfSample2 <- predict(LDAfit, newdata=ptrain2)
+confusion2<- confusionMatrix(ptrain2$classe, OutOfSample2)
+confusion2
+```
+The accuracy of LDA is 68% which is far lower then the Random Forrest analysis. 
+
+## Summary
+
+The Random Forrest is the best predictor of proper classification of the excercise models.  Linear Discriminate Analysis results did not achieve similiar accuracy. 
